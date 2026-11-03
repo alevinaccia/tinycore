@@ -1,0 +1,46 @@
+-- Tang Nano 20K top: 27 MHz
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity top is
+    port (
+        -- board
+        clk         : in  std_logic;
+        s1          : in  std_logic;
+        s2          : in  std_logic;
+        led         : out std_logic_vector(1 downto 0)
+
+    );
+end entity;
+
+architecture rtl of top is
+    signal por  : unsigned(7 downto 0) := (others => '0');
+    signal rst  : std_logic;
+    signal btn  : std_logic_vector(1 downto 0);
+    signal ledi : std_logic_vector(1 downto 0);
+    signal slp  : std_logic;
+begin
+    -- power-on reset, 255 cycles
+    -- wait for everything to settle before reset
+    process (clk) begin
+        if rising_edge(clk) then
+            if por /= 255 then por <= por + 1; end if;
+        end if;
+    end process;
+    rst <= '1' when por /= 255 else '0';
+
+    btn <= s2 & s1;
+
+    u_soc : entity work.soc
+        port map (
+            clk => clk,
+            rst => rst,
+            btn => btn,
+            led => ledi,
+            dbg_we => open, dbg_data => open,
+            sleeping => slp
+        );
+
+    led <= not ledi; -- leds are active low, thus we invert
+end architecture;
