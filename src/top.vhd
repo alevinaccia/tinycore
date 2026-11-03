@@ -9,7 +9,10 @@ entity top is
         clk         : in  std_logic;
         s1          : in  std_logic;
         s2          : in  std_logic;
-        led         : out std_logic_vector(1 downto 0)
+        led         : out std_logic_vector(1 downto 0);
+
+        -- uart
+        uart_tx     : out std_logic
 
     );
 end entity;
@@ -38,6 +41,7 @@ begin
             rst => rst,
             btn => btn,
             led => ledi,
+            uart_tx => uart_tx,
             dbg_we => open, dbg_data => open,
             sleeping => slp
         );
