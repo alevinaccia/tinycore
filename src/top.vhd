@@ -12,7 +12,12 @@ entity top is
         led         : out std_logic_vector(1 downto 0);
 
         -- uart
-        uart_tx     : out std_logic
+        uart_tx     : out std_logic;
+
+        -- lcd
+        lcd_rs      : out std_logic;
+        lcd_en      : out std_logic;
+        lcd_data    : out std_logic_vector(3 downto 0)
 
     );
 end entity;
@@ -42,6 +47,9 @@ begin
             btn => btn,
             led => ledi,
             uart_tx => uart_tx,
+            lcd_rs => lcd_rs,
+            lcd_data => lcd_data,
+            lcd_en => lcd_en,
             dbg_we => open, dbg_data => open,
             sleeping => slp
         );
