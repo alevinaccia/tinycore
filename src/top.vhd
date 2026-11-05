@@ -17,7 +17,10 @@ entity top is
         -- lcd
         lcd_rs      : out std_logic;
         lcd_en      : out std_logic;
-        lcd_data    : out std_logic_vector(3 downto 0)
+        lcd_data    : out std_logic_vector(3 downto 0);
+
+        -- buzzer
+        buzz        : out std_logic
 
     );
 end entity;
@@ -50,6 +53,7 @@ begin
             lcd_rs => lcd_rs,
             lcd_data => lcd_data,
             lcd_en => lcd_en,
+            buzz => buzz,
             dbg_we => open, dbg_data => open,
             sleeping => slp
         );
