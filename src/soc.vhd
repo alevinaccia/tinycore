@@ -5,9 +5,11 @@ use ieee.numeric_std.all;
 use work.prog_pkg.all;
 
 entity soc is
+    generic (DEB_CYCLES : positive := 270000);   -- 10 ms @ 27 MHz
     port (
         clk, rst : in  std_logic;
         btn      : in  std_logic_vector(1 downto 0);  -- active high
+        keyboard : in  std_logic_vector(3 downto 0);  -- active high
         led      : out std_logic_vector(1 downto 0);  -- active high
         uart_tx  : out std_logic;
         sleeping : out std_logic;
@@ -26,6 +28,7 @@ architecture rtl of soc is
     -- MMIO from 0x200 to 0x3FF, used only from 0x300
     constant A_LED           : unsigned(9 downto 0) := to_unsigned(16#300#, 10);
     constant A_BTN           : unsigned(9 downto 0) := to_unsigned(16#301#, 10);
+    constant A_KEYBOARD      : unsigned(9 downto 0) := to_unsigned(16#302#, 10);
     constant A_UDAT          : unsigned(9 downto 0) := to_unsigned(16#319#, 10);
     constant A_USTA          : unsigned(9 downto 0) := to_unsigned(16#31A#, 10);  -- bit0 = uart busy
     constant A_UDIV          : unsigned(9 downto 0) := to_unsigned(16#31B#, 10);
@@ -50,6 +53,10 @@ architecture rtl of soc is
     signal io_q           : std_logic_vector(7 downto 0) := (others => '0');
 
     signal led_r          : std_logic_vector(1 downto 0) := (others => '0');
+    signal bdeb, brise    : std_logic_vector(1 downto 0);
+    signal bpress         : std_logic_vector(1 downto 0) := (others => '0');
+    signal kdeb, krise    : std_logic_vector(3 downto 0);
+    signal kpress         : std_logic_vector(3 downto 0) := (others => '0');
     signal wake           : std_logic;
 
     signal u_div          : unsigned(7 downto 0) := to_unsigned(0, 8);
@@ -75,6 +82,14 @@ begin
 
     lcd_ctrl : entity work.lcd port map (clk => clk, lcd_rs => lcd_rs, lcd_en => lcd_en, lcd_data => lcd_data, data_in => lcd_data_in, start => lcd_start, busy => lcd_busy, reset_in => rst, rs_in => lcd_rs_in);
 
+    btn_db : entity work.debounce
+        generic map (WIDTH => 2, CYCLES => DEB_CYCLES)
+        port map (clk => clk, rst => rst, din => btn, q => bdeb, rise => brise);
+
+    key_db : entity work.debounce
+        generic map (WIDTH => 4, CYCLES => DEB_CYCLES)
+        port map (clk => clk, rst => rst, din => keyboard, q => kdeb, rise => krise);
+
     buz : entity work.buzzer port map (clk => clk, rst => rst, note => buz_note, pin => buzz);
 
     -- IMEM: sync read
@@ -97,10 +112,15 @@ begin
 
     -- bus: every slave answers in 1 cycle, ready held while valid
     process (clk)
+        variable bp : std_logic_vector(1 downto 0);
+        variable kp : std_logic_vector(3 downto 0);
     begin
         if rising_edge(clk) then
+            bp := bpress;
+            kp := kpress;
             if rst = '1' then
                 ready <= '0'; led_r <= (others => '0'); dbg_we <= '0';
+                bpress <= "00"; kpress <= "0000";
                 u_tx_start <= '0'; u_div <= to_unsigned(234, 8);
                 lcd_start <= '0';
                 buz_note <= "000";
@@ -121,7 +141,11 @@ begin
                         if addr = A_LCDDATA then lcd_data_in <= wdata; lcd_rs_in <= '1'; lcd_start <= '1'; end if;
                         if addr = A_BUZ then buz_note <= wdata(2 downto 0); end if;
                     elsif addr = A_BTN then
-                        io_q   <= "000000" & btn;
+                        io_q   <= "00" & bpress & "00" & bdeb;
+                        bp := "00";                         -- clear on read
+                    elsif addr = A_KEYBOARD then
+                        io_q   <= kpress & kdeb;             -- [7:4] presses, [3:0] level
+                        kp := "0000";                        -- clear on read
                     elsif addr = A_LED then
                         io_q <= "000000" & led_r;
                     elsif addr = A_USTA then
@@ -137,11 +161,14 @@ begin
                     end if;
                 end if;
 
+                -- latch presses until read
+                bpress <= bp or brise;
+                kpress <= kp or krise;
             end if;
         end if;
     end process;
 
     rdata <= dq when sel_ram = '1' else io_q;
     led   <= led_r;
-    wake  <= btn(0) or btn(1);
+    wake  <= bpress(0) or bpress(1);
 end architecture;

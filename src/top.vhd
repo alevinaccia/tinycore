@@ -11,6 +11,9 @@ entity top is
         s2          : in  std_logic;
         led         : out std_logic_vector(1 downto 0);
 
+        -- peripherals
+        keyboard    : in  std_logic_vector(3 downto 0);
+
         -- uart
         uart_tx     : out std_logic;
 
@@ -48,6 +51,7 @@ begin
             clk => clk,
             rst => rst,
             btn => btn,
+            keyboard => keyboard,
             led => ledi,
             uart_tx => uart_tx,
             lcd_rs => lcd_rs,
