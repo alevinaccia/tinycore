@@ -23,7 +23,11 @@ entity top is
         lcd_data    : out std_logic_vector(3 downto 0);
 
         -- buzzer
-        buzz        : out std_logic
+        buzz        : out std_logic;
+
+        -- pwm controller
+        pwm_pwr     : out std_logic;
+        pwm_en      : out std_logic
 
     );
 end entity;
@@ -59,7 +63,9 @@ begin
             lcd_en => lcd_en,
             buzz => buzz,
             dbg_we => open, dbg_data => open,
-            sleeping => slp
+            sleeping => slp,
+            pwm_pwr => pwm_pwr,
+            pwm_en   => pwm_en
         );
 
     led <= not ledi; -- leds are active low, thus we invert

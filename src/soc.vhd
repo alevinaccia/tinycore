@@ -17,6 +17,8 @@ entity soc is
         lcd_en   : out std_logic;
         lcd_data : out std_logic_vector(3 downto 0);
         buzz     : out std_logic;
+        pwm_pwr  : out std_logic;
+        pwm_en   : out std_logic;
 
         -- debug bus
         dbg_we   : out std_logic;                     -- write to 0x3FF (sim)
@@ -36,6 +38,7 @@ architecture rtl of soc is
     constant A_LCDDATA       : unsigned(9 downto 0) := to_unsigned(16#321#, 10);
     constant A_LCDSTAT       : unsigned(9 downto 0) := to_unsigned(16#322#, 10);  -- bit0 = lcd busy
     constant A_BUZ           : unsigned(9 downto 0) := to_unsigned(16#330#, 10);
+    constant A_PWM_DUTY      : unsigned(9 downto 0) := to_unsigned(16#350#, 10);
 
     constant A_DBG : unsigned(9 downto 0) := to_unsigned(16#3FF#, 10);
 
@@ -67,6 +70,7 @@ architecture rtl of soc is
     signal lcd_start, lcd_busy, lcd_rs_in : std_logic := '0';
 
     signal buz_note       : std_logic_vector(2 downto 0) := "000";
+    signal pwm_duty       : unsigned(7 downto 0) := (others => '0');
 
     signal first          : std_logic;
 begin
@@ -91,6 +95,14 @@ begin
         port map (clk => clk, rst => rst, din => keyboard, q => kdeb, rise => krise);
 
     buz : entity work.buzzer port map (clk => clk, rst => rst, note => buz_note, pin => buzz);
+
+    pwm_inst: entity work.pwm
+     port map(
+        clk => clk,
+        duty_in => std_logic_vector(pwm_duty),
+        en => pwm_en,
+        pwr => pwm_pwr
+    );
 
     -- IMEM: sync read
     process (clk) begin
@@ -124,6 +136,7 @@ begin
                 u_tx_start <= '0'; u_div <= to_unsigned(234, 8);
                 lcd_start <= '0';
                 buz_note <= "000";
+                pwm_duty <= (others => '0');
             else
                 ready       <= valid;
                 sel_ram     <= not addr(9);
@@ -140,6 +153,7 @@ begin
                         if addr = A_LCDCMD then lcd_data_in <= wdata; lcd_rs_in <= '0'; lcd_start <= '1'; end if;
                         if addr = A_LCDDATA then lcd_data_in <= wdata; lcd_rs_in <= '1'; lcd_start <= '1'; end if;
                         if addr = A_BUZ then buz_note <= wdata(2 downto 0); end if;
+                        if addr = A_PWM_DUTY then pwm_duty <= unsigned(wdata); end if;
                     elsif addr = A_BTN then
                         io_q   <= "00" & bpress & "00" & bdeb;
                         bp := "00";                         -- clear on read
@@ -154,6 +168,8 @@ begin
                         io_q <= "0000000" & lcd_busy;
                     elsif addr = A_BUZ then
                         io_q <= "00000" & buz_note;
+                    elsif addr = A_PWM_DUTY then
+                        io_q <= std_logic_vector(pwm_duty);
                     elsif addr = A_UDIV then
                         io_q <= std_logic_vector(u_div);
                     else
