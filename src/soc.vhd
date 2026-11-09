@@ -42,7 +42,9 @@ architecture rtl of soc is
     constant A_BUZ           : unsigned(9 downto 0) := to_unsigned(16#330#, 10);
     constant A_DACCTRL       : unsigned(9 downto 0) := to_unsigned(16#340#, 10);
     constant A_DACCMP        : unsigned(9 downto 0) := to_unsigned(16#341#, 10);
+    constant A_PWM_DUTY_STAT : unsigned(9 downto 0) := to_unsigned(16#342#, 10);  -- bit0 = sample ready
     constant A_PWM_DUTY      : unsigned(9 downto 0) := to_unsigned(16#350#, 10);
+    constant A_PWM_SETTLE    : unsigned(9 downto 0) := to_unsigned(16#351#, 10);
 
     constant A_DBG : unsigned(9 downto 0) := to_unsigned(16#3FF#, 10);
 
@@ -78,6 +80,8 @@ architecture rtl of soc is
     signal dac_cmp_s      : std_logic;
     signal buz_note       : std_logic_vector(2 downto 0) := "000";
     signal pwm_duty       : unsigned(7 downto 0) := (others => '0');
+    signal pwm_settle     : unsigned(7 downto 0) := to_unsigned(130, 8);  -- ~500 us
+    signal pwm_rdy        : std_logic;
 
     signal first          : std_logic;
 begin
@@ -107,8 +111,10 @@ begin
      port map(
         clk => clk,
         duty_in => std_logic_vector(pwm_duty),
+        settle_in => std_logic_vector(pwm_settle),
         en => pwm_en,
-        pwr => pwm_pwr
+        pwr => pwm_pwr,
+        ready => pwm_rdy
     );
 
     dac_inst: entity work.adc
@@ -154,6 +160,7 @@ begin
                 lcd_start <= '0';
                 buz_note <= "000";
                 pwm_duty <= (others => '0');
+                pwm_settle <= to_unsigned(130, 8);
             else
                 ready       <= valid;
                 sel_ram     <= not addr(9);
@@ -173,6 +180,7 @@ begin
                         if addr = A_BUZ then buz_note <= wdata(2 downto 0); end if;
                         if addr = A_DACCTRL then dac_data_in <= wdata(5 downto 0); dac_we <= '1' ; end if;
                         if addr = A_PWM_DUTY then pwm_duty <= unsigned(wdata); end if;
+                        if addr = A_PWM_SETTLE then pwm_settle <= unsigned(wdata); end if;
                     elsif addr = A_BTN then
                         io_q   <= "00" & bpress & "00" & bdeb;
                         bp := "00";                         -- clear on read
@@ -189,8 +197,12 @@ begin
                         io_q <= "00000" & buz_note;
                     elsif addr = A_DACCMP then
                         io_q <= "0000000" & dac_cmp_s;
+                    elsif addr = A_PWM_DUTY_STAT then
+                        io_q <= "0000000" & pwm_rdy;
                     elsif addr = A_PWM_DUTY then
                         io_q <= std_logic_vector(pwm_duty);
+                    elsif addr = A_PWM_SETTLE then
+                        io_q <= std_logic_vector(pwm_settle);
                     elsif addr = A_UDIV then
                         io_q <= std_logic_vector(u_div);
                     else
