@@ -27,8 +27,11 @@ entity top is
 
         -- pwm controller
         pwm_pwr     : out std_logic;
-        pwm_en      : out std_logic
+        pwm_en      : out std_logic;
 
+        -- adc (comparator + 2-2R)
+        dac_ctrl    : out std_logic_vector(5 downto 0);
+        adc_cmp     : in  std_logic
     );
 end entity;
 
@@ -65,7 +68,9 @@ begin
             dbg_we => open, dbg_data => open,
             sleeping => slp,
             pwm_pwr => pwm_pwr,
-            pwm_en   => pwm_en
+            pwm_en   => pwm_en,
+            dac_ctrl => dac_ctrl,
+            adc_cmp  => adc_cmp
         );
 
     led <= not ledi; -- leds are active low, thus we invert

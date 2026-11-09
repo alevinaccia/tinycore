@@ -19,6 +19,8 @@ entity soc is
         buzz     : out std_logic;
         pwm_pwr  : out std_logic;
         pwm_en   : out std_logic;
+        dac_ctrl : out std_logic_vector(5 downto 0);
+        adc_cmp  : in std_logic;
 
         -- debug bus
         dbg_we   : out std_logic;                     -- write to 0x3FF (sim)
@@ -38,6 +40,8 @@ architecture rtl of soc is
     constant A_LCDDATA       : unsigned(9 downto 0) := to_unsigned(16#321#, 10);
     constant A_LCDSTAT       : unsigned(9 downto 0) := to_unsigned(16#322#, 10);  -- bit0 = lcd busy
     constant A_BUZ           : unsigned(9 downto 0) := to_unsigned(16#330#, 10);
+    constant A_DACCTRL       : unsigned(9 downto 0) := to_unsigned(16#340#, 10);
+    constant A_DACCMP        : unsigned(9 downto 0) := to_unsigned(16#341#, 10);
     constant A_PWM_DUTY      : unsigned(9 downto 0) := to_unsigned(16#350#, 10);
 
     constant A_DBG : unsigned(9 downto 0) := to_unsigned(16#3FF#, 10);
@@ -51,6 +55,7 @@ architecture rtl of soc is
     signal wdata, rdata   : std_logic_vector(7 downto 0) := (others => '0');
     signal dq             : std_logic_vector(7 downto 0) := (others => '0');
     signal we, valid      : std_logic;
+    signal dac_we         : std_logic;
     signal ready          : std_logic := '0';
     signal sel_ram        : std_logic := '0';
     signal io_q           : std_logic_vector(7 downto 0) := (others => '0');
@@ -69,6 +74,8 @@ architecture rtl of soc is
     signal lcd_data_in    : std_logic_vector(7 downto 0) := (others => '0');
     signal lcd_start, lcd_busy, lcd_rs_in : std_logic := '0';
 
+    signal dac_data_in    : std_logic_vector(5 downto 0);
+    signal dac_cmp_s      : std_logic;
     signal buz_note       : std_logic_vector(2 downto 0) := "000";
     signal pwm_duty       : unsigned(7 downto 0) := (others => '0');
 
@@ -102,6 +109,16 @@ begin
         duty_in => std_logic_vector(pwm_duty),
         en => pwm_en,
         pwr => pwm_pwr
+    );
+
+    dac_inst: entity work.adc
+     port map(
+        clk => clk,
+        we  => dac_we,
+        din => dac_data_in,
+        ctrl => dac_ctrl,
+        cmp_in => adc_cmp,
+        cmp => dac_cmp_s
     );
 
     -- IMEM: sync read
@@ -141,6 +158,7 @@ begin
                 ready       <= valid;
                 sel_ram     <= not addr(9);
                 dbg_we      <= '0';
+                dac_we      <= '0';
                 u_tx_start  <= '0';
                 lcd_start   <= '0';
 
@@ -153,6 +171,7 @@ begin
                         if addr = A_LCDCMD then lcd_data_in <= wdata; lcd_rs_in <= '0'; lcd_start <= '1'; end if;
                         if addr = A_LCDDATA then lcd_data_in <= wdata; lcd_rs_in <= '1'; lcd_start <= '1'; end if;
                         if addr = A_BUZ then buz_note <= wdata(2 downto 0); end if;
+                        if addr = A_DACCTRL then dac_data_in <= wdata(5 downto 0); dac_we <= '1' ; end if;
                         if addr = A_PWM_DUTY then pwm_duty <= unsigned(wdata); end if;
                     elsif addr = A_BTN then
                         io_q   <= "00" & bpress & "00" & bdeb;
@@ -168,6 +187,8 @@ begin
                         io_q <= "0000000" & lcd_busy;
                     elsif addr = A_BUZ then
                         io_q <= "00000" & buz_note;
+                    elsif addr = A_DACCMP then
+                        io_q <= "0000000" & dac_cmp_s;
                     elsif addr = A_PWM_DUTY then
                         io_q <= std_logic_vector(pwm_duty);
                     elsif addr = A_UDIV then
