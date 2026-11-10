@@ -66,7 +66,7 @@
   </section>
 </main>
 <script>
-const CHAR_GAP_MS = 20;      // > 15 ms TinyCore tick: RX has no FIFO yet
+const ECHO_TIMEOUT_MS = 300;  // wait for each char's echo: RX has no FIFO yet
 const ACK_TIMEOUT_MS = 1500;
 const $ = id => document.getElementById(id);
 let port, writer, busy = false, want = null, history = [], lastAck = null, timeouts = 0;
@@ -93,6 +93,7 @@ async function readLoop() {
       const { value, done } = await reader.read();
       if (done) break;
       const s = dec.decode(value); log(s); buf += s;
+      for (const ch of s) if (echoWaiter && ch === echoWaiter.ch) { echoWaiter.res(); echoWaiter = null; }
       let i;
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
@@ -103,7 +104,7 @@ async function readLoop() {
   } catch (e) { $('status').textContent = 'disconnected'; $('dot').classList.remove('on'); }
 }
 
-let ackWaiter = null;
+let ackWaiter = null, echoWaiter = null;
 function onAck(v) {
   lastAck = v; history.push({ t: Date.now(), v });
   $('duty').textContent = v; $('pct').textContent = Math.round(v / 2.55) + ' %';
@@ -122,7 +123,13 @@ async function pump() {
   while (want !== null) {
     const v = want; want = null;
     const cmd = 'D' + v + '\r';
-    for (const ch of cmd) { await writer.write(new TextEncoder().encode(ch)); await sleep(CHAR_GAP_MS); }
+    let lost = false;
+    for (const ch of cmd) {
+      const echoed = new Promise(r => echoWaiter = { ch, res: r }).then(() => true);
+      await writer.write(new TextEncoder().encode(ch));
+      if (!await Promise.race([echoed, sleep(ECHO_TIMEOUT_MS).then(() => false)])) { echoWaiter = null; lost = true; break; }
+    }
+    if (lost) { $('tmo').textContent = ++timeouts; want = want ?? v; await sleep(100); continue; }
     const ok = await Promise.race([new Promise(r => ackWaiter = r).then(() => true), sleep(ACK_TIMEOUT_MS).then(() => false)]);
     if (!ok) { ackWaiter = null; $('tmo').textContent = ++timeouts; }
   }
