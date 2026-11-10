@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TinyCore Motor</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --fg:#e6e8ee; --mut:#8a90a0; --acc:#4cc38a; --err:#e5534b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 -apple-system, system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:900px; margin:0 auto; padding:24px; display:grid; gap:16px; grid-template-columns:1fr 1fr; }
+  header { grid-column:1/-1; display:flex; align-items:center; gap:12px; }
+  h1 { font-size:18px; margin:0; flex:1; }
+  .card { background:var(--card); border-radius:12px; padding:16px; }
+  .wide { grid-column:1/-1; }
+  button { background:#262b36; color:var(--fg); border:0; border-radius:8px; padding:8px 14px; font:inherit; cursor:pointer; }
+  button:hover { background:#313848; }
+  button.primary { background:var(--acc); color:#08140e; font-weight:600; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--err); display:inline-block; }
+  .dot.on { background:var(--acc); }
+  .big { font-size:56px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .mut { color:var(--mut); font-size:12px; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  input[type=number] { width:80px; background:#262b36; color:var(--fg); border:0; border-radius:8px; padding:8px; font:inherit; }
+  canvas { width:100%; height:180px; display:block; }
+  pre { margin:0; height:160px; overflow:auto; font:12px ui-monospace, monospace; color:var(--mut); white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span id="dot" class="dot"></span>
+    <h1>TinyCore motor control</h1>
+    <span class="mut" id="status">not connected</span>
+    <button id="connect" class="primary">Connect</button>
+  </header>
+
+  <section class="card">
+    <div class="mut">Duty (acknowledged by TinyCore)</div>
+    <div class="big" id="duty">—</div>
+    <div class="mut"><span id="pct">—</span> · pending: <span id="pending">none</span> · timeouts: <span id="tmo">0</span></div>
+  </section>
+
+  <section class="card">
+    <div class="mut">Set duty (0–255)</div>
+    <input type="range" id="slider" min="0" max="255" value="0">
+    <div class="row">
+      <input type="number" id="num" min="0" max="255" value="0">
+      <button id="send">Send</button>
+      <button data-v="0">0</button>
+      <button data-v="64">64</button>
+      <button data-v="128">128</button>
+      <button data-v="192">192</button>
+      <button data-v="255">255</button>
+    </div>
+  </section>
+
+  <section class="card wide">
+    <div class="mut">Duty over the last 60 s</div>
+    <canvas id="chart"></canvas>
+  </section>
+
+  <section class="card wide">
+    <div class="mut">Serial log · open "Mac control" on the LCD first</div>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+const CHAR_GAP_MS = 20;      // > 15 ms TinyCore tick: RX has no FIFO yet
+const ACK_TIMEOUT_MS = 1500;
+const $ = id => document.getElementById(id);
+let port, writer, busy = false, want = null, history = [], lastAck = null, timeouts = 0;
+
+function log(s) { const l = $('log'); l.textContent += s; if (l.textContent.length > 8000) l.textContent = l.textContent.slice(-6000); l.scrollTop = l.scrollHeight; }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+$('connect').onclick = async () => {
+  if (!('serial' in navigator)) { alert('Web Serial needs Chrome or Edge.'); return; }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    writer = port.writable.getWriter();
+    $('dot').classList.add('on'); $('status').textContent = 'connected · 115200 8N1';
+    readLoop();
+  } catch (e) { $('status').textContent = e.message; }
+};
+
+async function readLoop() {
+  const dec = new TextDecoder(); let buf = '';
+  const reader = port.readable.getReader();
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const s = dec.decode(value); log(s); buf += s;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        const m = line.match(/^OK (\d{3})$/);
+        if (m) onAck(parseInt(m[1], 10));
+      }
+    }
+  } catch (e) { $('status').textContent = 'disconnected'; $('dot').classList.remove('on'); }
+}
+
+let ackWaiter = null;
+function onAck(v) {
+  lastAck = v; history.push({ t: Date.now(), v });
+  $('duty').textContent = v; $('pct').textContent = Math.round(v / 2.55) + ' %';
+  if (ackWaiter) { ackWaiter(); ackWaiter = null; }
+}
+
+// latest value wins; one command in flight
+function request(v) {
+  want = Math.max(0, Math.min(255, v | 0));
+  $('pending').textContent = want;
+  if (!busy) pump();
+}
+async function pump() {
+  if (!writer) return;
+  busy = true;
+  while (want !== null) {
+    const v = want; want = null;
+    const cmd = 'D' + v + '\r';
+    for (const ch of cmd) { await writer.write(new TextEncoder().encode(ch)); await sleep(CHAR_GAP_MS); }
+    const ok = await Promise.race([new Promise(r => ackWaiter = r).then(() => true), sleep(ACK_TIMEOUT_MS).then(() => false)]);
+    if (!ok) { ackWaiter = null; $('tmo').textContent = ++timeouts; }
+  }
+  busy = false; $('pending').textContent = 'none';
+}
+
+let dragTimer = null;
+$('slider').oninput = e => { $('num').value = e.target.value; clearTimeout(dragTimer); dragTimer = setTimeout(() => request(+e.target.value), 120); };
+$('send').onclick = () => { $('slider').value = $('num').value; request(+$('num').value); };
+$('num').onkeydown = e => { if (e.key === 'Enter') $('send').onclick(); };
+document.querySelectorAll('button[data-v]').forEach(b => b.onclick = () => { $('slider').value = $('num').value = b.dataset.v; request(+b.dataset.v); });
+
+function draw() {
+  const c = $('chart'), dpr = devicePixelRatio || 1;
+  c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr;
+  const g = c.getContext('2d'), W = c.width, H = c.height, now = Date.now(), span = 60000;
+  g.clearRect(0, 0, W, H);
+  g.strokeStyle = '#2a2f3a'; g.lineWidth = 1; g.fillStyle = '#8a90a0'; g.font = 11 * dpr + 'px sans-serif';
+  [0, 64, 128, 192, 255].forEach(v => { const y = H - v / 255 * (H - 10 * dpr) - 5 * dpr; g.beginPath(); g.moveTo(30 * dpr, y); g.lineTo(W, y); g.stroke(); g.fillText(v, 0, y + 4 * dpr); });
+  history = history.filter(p => now - p.t < span + 5000);
+  const pts = history.slice(); if (lastAck !== null) pts.push({ t: now, v: lastAck });
+  if (pts.length) {
+    g.strokeStyle = '#4cc38a'; g.lineWidth = 2 * dpr; g.beginPath();
+    pts.forEach((p, i) => {
+      const x = 30 * dpr + (1 - (now - p.t) / span) * (W - 30 * dpr), y = H - p.v / 255 * (H - 10 * dpr) - 5 * dpr;
+      if (i === 0) g.moveTo(Math.max(x, 30 * dpr), y); else { g.lineTo(x, g._y ?? y); g.lineTo(x, y); }
+      g._y = y;
+    });
+    g.stroke();
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>
