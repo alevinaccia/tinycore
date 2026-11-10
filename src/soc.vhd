@@ -21,6 +21,7 @@ entity soc is
         pwm_en   : out std_logic;
         dac_ctrl : out std_logic_vector(5 downto 0);
         adc_cmp  : in std_logic;
+        rx_in    : in std_logic;
 
         -- debug bus
         dbg_we   : out std_logic;                     -- write to 0x3FF (sim)
@@ -36,6 +37,8 @@ architecture rtl of soc is
     constant A_UDAT          : unsigned(9 downto 0) := to_unsigned(16#319#, 10);
     constant A_USTA          : unsigned(9 downto 0) := to_unsigned(16#31A#, 10);  -- bit0 = uart busy
     constant A_UDIV          : unsigned(9 downto 0) := to_unsigned(16#31B#, 10);
+    constant A_URXDATA       : unsigned(9 downto 0) := to_unsigned(16#31C#, 10);
+    constant A_URXSTAT       : unsigned(9 downto 0) := to_unsigned(16#31D#, 10);  -- bit0 data ready, bit1 framing err
     constant A_LCDCMD        : unsigned(9 downto 0) := to_unsigned(16#320#, 10);
     constant A_LCDDATA       : unsigned(9 downto 0) := to_unsigned(16#321#, 10);
     constant A_LCDSTAT       : unsigned(9 downto 0) := to_unsigned(16#322#, 10);  -- bit0 = lcd busy
@@ -72,6 +75,8 @@ architecture rtl of soc is
     signal u_div          : unsigned(7 downto 0) := to_unsigned(0, 8);
     signal u_tx_data      : std_logic_vector(7 downto 0) := (others => '0');
     signal u_tx_start, u_tx_busy : std_logic := '0';
+    signal u_rx_valid, u_rx_error : std_logic := '0';
+    signal u_rx_byte      : std_logic_vector(7 downto 0) := (others => '0');
 
     signal lcd_data_in    : std_logic_vector(7 downto 0) := (others => '0');
     signal lcd_start, lcd_busy, lcd_rs_in : std_logic := '0';
@@ -94,6 +99,16 @@ begin
 
     u_tx : entity work.uart_tx
         port map (clk => clk, rst => rst, div => u_div, data => u_tx_data, start => u_tx_start, busy => u_tx_busy, tx => uart_tx);
+
+    u_rx: entity work.uart_rx
+     port map(
+        clk => clk,
+        data_in => rx_in,
+        div => u_div,
+        valid => u_rx_valid,
+        err => u_rx_error,
+        rx_byte => u_rx_byte
+    );
 
     lcd_ctrl : entity work.lcd port map (clk => clk, lcd_rs => lcd_rs, lcd_en => lcd_en, lcd_data => lcd_data, data_in => lcd_data_in, start => lcd_start, busy => lcd_busy, reset_in => rst, rs_in => lcd_rs_in);
 
@@ -191,6 +206,10 @@ begin
                         io_q <= "000000" & led_r;
                     elsif addr = A_USTA then
                         io_q <= "0000000" & u_tx_busy;
+                    elsif addr = A_URXDATA then
+                        io_q <= u_rx_byte;
+                    elsif addr = A_URXSTAT then
+                        io_q <= "000000" & u_rx_error & u_rx_valid;
                     elsif addr = A_LCDSTAT then
                         io_q <= "0000000" & lcd_busy;
                     elsif addr = A_BUZ then

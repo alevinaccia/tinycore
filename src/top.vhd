@@ -15,6 +15,7 @@ entity top is
         keyboard    : in  std_logic_vector(3 downto 0);
 
         -- uart
+        uart_rx     : in std_logic;
         uart_tx     : out std_logic;
 
         -- lcd
@@ -70,7 +71,8 @@ begin
             pwm_pwr => pwm_pwr,
             pwm_en   => pwm_en,
             dac_ctrl => dac_ctrl,
-            adc_cmp  => adc_cmp
+            adc_cmp  => adc_cmp,
+            rx_in => uart_rx
         );
 
     led <= not ledi; -- leds are active low, thus we invert
