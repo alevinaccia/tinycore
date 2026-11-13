@@ -2,6 +2,8 @@
 
 An 8-bit CPU and SoC written in VHDL for the Sipeed Tang Nano 20K (Gowin GW2AR-18, 27 MHz), built for the *Electronics for Embedded Systems* course. The CPU runs a menu-driven program on a 16x2 LCD. The program covers a 4-key synth, a melody player, a UART check screen, and DC motor speed control. Motor speed is measured through back-EMF, using a R-2R DAC, a comparator and a software SAR loop. The motor duty can also be set from a Mac over UART.
 
+<img width="4032" height="3024" alt="IMG_2258" src="https://github.com/user-attachments/assets/a29442f2-c128-4f9c-ba4f-67833b9353fe" />
+
 ## Course requirements
 
 | Requirement | How it is satisfied |
