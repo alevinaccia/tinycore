@@ -1,4 +1,4 @@
--- TinyCore SoC: core + IMEM 1Kx16 + DMEM 512x8 + MMIO peripherals + debug port
+-- TinyCore SoC: core + IMEM 1Kx16 + DMEM 512x8 + LED/BTN/KEYBOARD + debug port
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -22,7 +22,7 @@ entity soc is
         dac_ctrl : out std_logic_vector(5 downto 0);
         adc_cmp  : in std_logic;
         rx_in    : in std_logic;
-
+        
         -- debug bus
         dbg_we   : out std_logic;                     -- write to 0x3FF (sim)
         dbg_data : out std_logic_vector(7 downto 0)
@@ -31,16 +31,16 @@ end entity;
 
 architecture rtl of soc is
     -- MMIO from 0x200 to 0x3FF, used only from 0x300
-    constant A_LED           : unsigned(9 downto 0) := to_unsigned(16#300#, 10);
+    constant A_LED           : unsigned(9 downto 0) := to_unsigned(16#300#, 10); 
     constant A_BTN           : unsigned(9 downto 0) := to_unsigned(16#301#, 10);
     constant A_KEYBOARD      : unsigned(9 downto 0) := to_unsigned(16#302#, 10);
     constant A_UDAT          : unsigned(9 downto 0) := to_unsigned(16#319#, 10);
-    constant A_USTA          : unsigned(9 downto 0) := to_unsigned(16#31A#, 10);  -- bit0 = uart busy
+    constant A_USTA          : unsigned(9 downto 0) := to_unsigned(16#31A#, 10);  -- bito = uart busy
     constant A_UDIV          : unsigned(9 downto 0) := to_unsigned(16#31B#, 10);
     constant A_URXDATA       : unsigned(9 downto 0) := to_unsigned(16#31C#, 10);
-    constant A_URXSTAT       : unsigned(9 downto 0) := to_unsigned(16#31D#, 10);  -- bit0 data ready, bit1 framing err
+    constant A_URXSTAT       : unsigned(9 downto 0) := to_unsigned(16#31D#, 10); -- bit0 data ready, bit1 framing err
     constant A_LCDCMD        : unsigned(9 downto 0) := to_unsigned(16#320#, 10);
-    constant A_LCDDATA       : unsigned(9 downto 0) := to_unsigned(16#321#, 10);
+    constant A_LCDDATA       : unsigned(9 downto 0) := to_unsigned(16#321#, 10); 
     constant A_LCDSTAT       : unsigned(9 downto 0) := to_unsigned(16#322#, 10);  -- bit0 = lcd busy
     constant A_BUZ           : unsigned(9 downto 0) := to_unsigned(16#330#, 10);
     constant A_DACCTRL       : unsigned(9 downto 0) := to_unsigned(16#340#, 10);
@@ -65,7 +65,7 @@ architecture rtl of soc is
     signal sel_ram        : std_logic := '0';
     signal io_q           : std_logic_vector(7 downto 0) := (others => '0');
 
-    signal led_r          : std_logic_vector(1 downto 0) := (others => '0');
+    signal led_r               : std_logic_vector(1 downto 0) := (others => '0');
     signal bdeb, brise    : std_logic_vector(1 downto 0);
     signal bpress         : std_logic_vector(1 downto 0) := (others => '0');
     signal kdeb, krise    : std_logic_vector(3 downto 0);
@@ -78,9 +78,9 @@ architecture rtl of soc is
     signal u_rx_valid, u_rx_error : std_logic := '0';
     signal u_rx_byte      : std_logic_vector(7 downto 0) := (others => '0');
 
-    signal lcd_data_in    : std_logic_vector(7 downto 0) := (others => '0');
+    signal lcd_data_in      : std_logic_vector(7 downto 0) := (others => '0');
     signal lcd_start, lcd_busy, lcd_rs_in : std_logic := '0';
-
+    
     signal dac_data_in    : std_logic_vector(5 downto 0);
     signal dac_cmp_s      : std_logic;
     signal buz_note       : std_logic_vector(2 downto 0) := "000";
@@ -99,7 +99,7 @@ begin
 
     u_tx : entity work.uart_tx
         port map (clk => clk, rst => rst, div => u_div, data => u_tx_data, start => u_tx_start, busy => u_tx_busy, tx => uart_tx);
-
+    
     u_rx: entity work.uart_rx
      port map(
         clk => clk,
@@ -109,8 +109,8 @@ begin
         err => u_rx_error,
         rx_byte => u_rx_byte
     );
-
-    lcd_ctrl : entity work.lcd port map (clk => clk, lcd_rs => lcd_rs, lcd_en => lcd_en, lcd_data => lcd_data, data_in => lcd_data_in, start => lcd_start, busy => lcd_busy, reset_in => rst, rs_in => lcd_rs_in);
+    
+    lcd_ctrl : entity work.lcd port map (clk => clk, lcd_rs => lcd_rs, lcd_en => lcd_en, lcd_data => lcd_data, data_in => lcd_data_in, start => lcd_start, busy => lcd_busy, reset_in => rst, rs_in => lcd_rs_in); 
 
     btn_db : entity work.debounce
         generic map (WIDTH => 2, CYCLES => DEB_CYCLES)
@@ -142,6 +142,7 @@ begin
         cmp => dac_cmp_s
     );
 
+
     -- IMEM: sync read
     process (clk) begin
         if rising_edge(clk) then
@@ -169,19 +170,16 @@ begin
             bp := bpress;
             kp := kpress;
             if rst = '1' then
-                ready <= '0'; led_r <= (others => '0'); dbg_we <= '0';
-                bpress <= "00"; kpress <= "0000";
-                u_tx_start <= '0'; u_div <= to_unsigned(234, 8);
-                lcd_start <= '0';
-                buz_note <= "000";
-                pwm_duty <= (others => '0');
-                pwm_settle <= to_unsigned(130, 8);
+                ready <= '0'; led_r <= (others => '0'); bpress <= "00"; kpress <= "0000";
+                dbg_we <= '0'; u_tx_start <= '0'; u_div <= TO_UNSIGNED(234, 8);
+                lcd_start <= '0'; buz_note <= "000";
+                pwm_duty <= (others => '0'); pwm_settle <= to_unsigned(130, 8);
             else
                 ready       <= valid;
                 sel_ram     <= not addr(9);
                 dbg_we      <= '0';
                 dac_we      <= '0';
-                u_tx_start  <= '0';
+                u_tx_start     <= '0';
                 lcd_start   <= '0';
 
                 if first = '1' then
@@ -189,7 +187,7 @@ begin
                         if addr = A_LED then led_r <= wdata(1 downto 0); end if;
                         if addr = A_DBG then dbg_we <= '1'; dbg_data <= wdata; end if;
                         if addr = A_UDAT then u_tx_data <= wdata; u_tx_start <= '1'; end if;
-                        if addr = A_UDIV then u_div <= unsigned(wdata); end if;
+                        if addr = A_UDIV then u_div <= unsigned(wdata); end if; 
                         if addr = A_LCDCMD then lcd_data_in <= wdata; lcd_rs_in <= '0'; lcd_start <= '1'; end if;
                         if addr = A_LCDDATA then lcd_data_in <= wdata; lcd_rs_in <= '1'; lcd_start <= '1'; end if;
                         if addr = A_BUZ then buz_note <= wdata(2 downto 0); end if;

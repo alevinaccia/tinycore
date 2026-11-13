@@ -5,11 +5,12 @@ use ieee.numeric_std.all;
 
 entity top is
     port (
-        -- board
+        -- board 
         clk         : in  std_logic;
         s1          : in  std_logic;
         s2          : in  std_logic;
         led         : out std_logic_vector(1 downto 0);
+
 
         -- peripherals
         keyboard    : in  std_logic_vector(3 downto 0);
@@ -28,7 +29,7 @@ entity top is
 
         -- pwm controller
         pwm_pwr     : out std_logic;
-        pwm_en      : out std_logic;
+        pwm_en      : out std_logic; 
 
         -- adc (comparator + 2-2R)
         dac_ctrl    : out std_logic_vector(5 downto 0);
@@ -56,17 +57,17 @@ begin
 
     u_soc : entity work.soc
         port map (
-            clk => clk,
-            rst => rst,
-            btn => btn,
+            clk => clk, 
+            rst => rst, 
+            btn => btn, 
             keyboard => keyboard,
-            led => ledi,
+            led => ledi, 
             uart_tx => uart_tx,
-            lcd_rs => lcd_rs,
-            lcd_data => lcd_data,
-            lcd_en => lcd_en,
+            lcd_rs => lcd_rs, 
+            lcd_data => lcd_data, 
+            lcd_en => lcd_en, 
             buzz => buzz,
-            dbg_we => open, dbg_data => open,
+            dbg_we => open, dbg_data => open, 
             sleeping => slp,
             pwm_pwr => pwm_pwr,
             pwm_en   => pwm_en,
@@ -75,5 +76,5 @@ begin
             rx_in => uart_rx
         );
 
-    led <= not ledi; -- leds are active low, thus we invert
+    led <= not ledi; --leds are active low, thus we invert
 end architecture;
